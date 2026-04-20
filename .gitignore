@@ -1,41 +1,39 @@
-# Prerequisites
-*.d
+# 1. Foldery budowania (CMake / Qt Creator / VS Code)
+build/
+build-*/
+out/
+bin/
 
-# Compiled Object files
-*.slo
-*.lo
+# 2. Pliki konfiguracyjne użytkownika środowiska Qt Creator
+*.pro.user
+*.pro.user.*
+
+# 3. Pliki generowane automatycznie przez system budowania CMake/qmake
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+Makefile*
+compile_commands.json
+
+# 4. Pliki generowane automatycznie przez Qt (MOC, UIC, RCC)
+moc_*.cpp
+moc_*.h
+ui_*.h
+qrc_*.cpp
+
+# 5. Skompilowane pliki obiektowe i binarne
 *.o
 *.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
 *.exe
-*.out
-*.app
+*.so
+*.dll
+*.a
 
-# debug information files
-*.dwo
+# 6. Pliki konfiguracyjne Visual Studio Code (opcjonalnie)
+.vscode/
+
+# 7. Pliki systemowe i tymczasowe (Windows / Linux / macOS)
+Thumbs.db
+.DS_Store
+*~
+*.swp
