@@ -1,24 +1,43 @@
+/**
+ * @file mainwindow.cpp
+ * @brief Implementacja metod klasy MainWindow.
+ * * Zawiera logikę obsługi interfejsu użytkownika, komunikacji sieciowej
+ * z API MPK Wrocław oraz formatowania danych sensorycznych.
+ */
+
 #include "mainwindow.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
-#include <QLabel>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDateTime>
 #include <QNetworkRequest>
 
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), isTracking(false) {
+/**
+ * @brief Konstruktor okna głównego.
+ * * Inicjalizuje interfejs, tworzy menedżera sieci oraz timery.
+ * Łączy sygnały przycisków i mechanizmów sieciowych z odpowiednimi slotami.
+ * @param parent Wskaźnik na obiekt nadrzędny.
+ */
+MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), isTracking(false), isPolish(true) {
     setupUI();
 
     networkManager = new QNetworkAccessManager(this);
     dataTimer = new QTimer(this);
 
+    // Połączenie logiki przycisków i zdarzeń czasowych
     connect(btnToggle, &QPushButton::clicked, this, &MainWindow::toggleTracking);
+    connect(btnLang, &QPushButton::clicked, this, &MainWindow::toggleLanguage);
     connect(dataTimer, &QTimer::timeout, this, &MainWindow::fetchTramData);
     connect(networkManager, &QNetworkAccessManager::finished, this, &MainWindow::onResult);
 }
 
+/**
+ * @brief Inicjalizacja i rozmieszczenie elementów GUI.
+ * * Tworzy układ boczny (filtry, przyciski) oraz panel główny (logi, zakładki).
+ * Konfiguruje style CSS dla konsoli logów (kolory, czcionka monospace).
+ */
 void MainWindow::setupUI() {
     QWidget *centralWidget = new QWidget(this);
     QHBoxLayout *mainLayout = new QHBoxLayout(centralWidget);
@@ -26,118 +45,179 @@ void MainWindow::setupUI() {
     // --- PANEL BOCZNY ---
     QVBoxLayout *sidePanelLayout = new QVBoxLayout();
     
-    btnToggle = new QPushButton("START", this);
-    btnToggle->setMinimumHeight(40);
+    btnLang = new QPushButton("Zmień język (EN)", this);
+    statusLabel = new QLabel("Status: Aktywny", this);
     
-    QLabel *filterLabel = new QLabel("Filtrowanie Linii:", this);
+    btnToggle = new QPushButton("START", this);
+    btnToggle->setMinimumHeight(45);
+    btnToggle->setStyleSheet("background-color: #2e7d32; color: white; font-weight: bold;");
+
+    filterLabel = new QLabel("<b>Filtrowanie linii:</b>", this);
     lineFilterList = new QListWidget(this);
-    // Zaktualizowano filtry pod linie z Twojego zapytania (D, 145)
-    QStringList linie = {"D", "145", "17", "33"};
+    
+    // Inicjalizacja listy linii do śledzenia
+    QStringList linie = {"1", "16", "145", "149"};
     for(const QString& linia : linie) {
-        QListWidgetItem* item = new QListWidgetItem("Linia " + linia, lineFilterList);
-        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        QListWidgetItem* item = new QListWidgetItem(linia, lineFilterList);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
         item->setCheckState(Qt::Checked);
     }
 
+    sidePanelLayout->addWidget(btnLang);
+    sidePanelLayout->addWidget(statusLabel);
     sidePanelLayout->addWidget(btnToggle);
+    sidePanelLayout->addSpacing(10);
     sidePanelLayout->addWidget(filterLabel);
     sidePanelLayout->addWidget(lineFilterList);
     sidePanelLayout->addStretch();
 
-    // --- OBSZAR GŁÓWNY ---
-    mainTabs = new QTabWidget(this);
+    // --- PANEL GŁÓWNY ---
+    QVBoxLayout *rightPanelLayout = new QVBoxLayout();
+    
+    headerLabel = new QLabel("<b>MONITOR TRASY - DANE SENSORYCZNE LIVE</b>", this);
     
     logConsole = new QTextEdit(this);
     logConsole->setReadOnly(true);
-    mainTabs->addTab(logConsole, "Live Tracking (Logi)");
+    logConsole->setMinimumHeight(250);
+    // Stylizacja konsoli: czarne tło, zielony tekst, zachowanie spacji (white-space)
+    logConsole->setStyleSheet("background-color: #000000; color: #00FF00; font-family: 'Courier New';  white-space: pre;");
 
+    mainTabs = new QTabWidget(this);
     speedChartTab = new QWidget(this);
-    mainTabs->addTab(speedChartTab, "Wykres Prędkości");
-
     delayChartTab = new QWidget(this);
-    mainTabs->addTab(delayChartTab, "Wykres Opóźnień");
+    
+    mainTabs->addTab(speedChartTab, "Prędkość [km/h]");
+    mainTabs->addTab(delayChartTab, "Opóźnienie [min]");
+
+    rightPanelLayout->addWidget(headerLabel);
+    rightPanelLayout->addWidget(logConsole);
+    rightPanelLayout->addWidget(mainTabs);
 
     mainLayout->addLayout(sidePanelLayout, 1);
-    mainLayout->addWidget(mainTabs, 4);
+    mainLayout->addLayout(rightPanelLayout, 3);
 
     setCentralWidget(centralWidget);
-    setWindowTitle("ART - Analizator Ruchu Tramwajowego (Dane Rzeczywiste)");
-    resize(900, 600);
+    setWindowTitle("ART - Analizator Ruchu Tramwajowego");
+    resize(1000, 750);
 }
 
+/**
+ * @brief Zmienia wersję językową interfejsu (PL/EN).
+ * * Dynamicznie aktualizuje teksty we wszystkich etykietach, przyciskach
+ * oraz zakładkach obiektu QTabWidget.
+ */
+void MainWindow::toggleLanguage() {
+    isPolish = !isPolish; 
+
+    if (isPolish) {
+        btnLang->setText(tr("Zmień język (EN)"));
+        btnToggle->setText(isTracking ? tr("STOP") : tr("START"));
+        statusLabel->setText(tr("Status: Aktywny"));
+        headerLabel->setText(tr("<b>MONITOR TRASY - DANE SENSORYCZNE LIVE</b>"));
+        
+        // Tłumaczenie elementów, o które pytałeś:
+        filterLabel->setText(tr("<b>Filtrowanie linii:</b>"));
+        mainTabs->setTabText(0, tr("Prędkość [km/h]"));
+        mainTabs->setTabText(1, tr("Opóźnienie [min]"));
+        
+    } else {
+        btnLang->setText(tr("Change Language (PL)"));
+        btnToggle->setText(isTracking ? tr("STOP") : tr("START"));
+        statusLabel->setText(tr("Status: Active"));
+        headerLabel->setText(tr("<b>ROUTE MONITOR - LIVE SENSORY DATA</b>"));
+        
+        // Angielskie odpowiedniki:
+        filterLabel->setText(tr("<b>Line Filtering:</b>"));
+        mainTabs->setTabText(0, tr("Speed [km/h]"));
+        mainTabs->setTabText(1, tr("Delay [min]"));
+    }
+}
+/**
+ * @brief Kontroluje stan śledzenia danych.
+ * * Uruchamia lub zatrzymuje QTimer. Przy starcie wypisuje sformatowany
+ * nagłówek tabeli do konsoli logów.
+ */
 void MainWindow::toggleTracking() {
     if(!isTracking) {
-        dataTimer->start(10000); // 10 sekund, tak jak w Twoim kodzie
+        dataTimer->start(10000); // 10 sekundowy interwał
         btnToggle->setText("STOP");
-        logConsole->append("<b>[SYSTEM]</b> Uruchomiono strumień danych MPK...");
+        btnToggle->setStyleSheet("background-color: #c62828; color: white; font-weight: bold; ");
+        
+        // Formatowanie nagłówka tabeli danych
+        QString header = QString("<b>%1 | %2 | %3 | %4 | %5</b>")
+                       .arg(isPolish ? "CZAS" : "TIME", -10)
+                       .arg(isPolish ? "LINIA" : "LINE", -12)
+                       .arg("ID", -14)
+                       .arg(isPolish ? "POZ_X" : "POS_X", -11)
+                       .arg(isPolish ? "POZ_Y" : "POS_Y", -10);
+        
+        header.replace(" ", "&nbsp;"); // Wymuszenie zachowania spacji w HTML
+        logConsole->append(header);
+        logConsole->append(QString(70, '-')); 
+    
         fetchTramData();
     } else {
         dataTimer->stop();
         btnToggle->setText("START");
-        logConsole->append("<b>[SYSTEM]</b> Zatrzymano pobieranie.");
+        btnToggle->setStyleSheet("background-color: #2e7d32; color: white; font-weight: bold;");
+        logConsole->append(isPolish ? "<i>[SYSTEM] Monitoring zatrzymany.</i>" : "<i>[SYSTEM] Monitoring stopped.</i>");
     }
     isTracking = !isTracking;
 }
 
+/**
+ * @brief Wysyła żądanie HTTP POST do serwera MPK.
+ * * Przygotowuje parametry busList dla wybranych linii autobusowych i tramwajowych.
+ */
 void MainWindow::fetchTramData() {
-    // 1. Ustawienie adresu z Twojego kodu
     QUrl url("https://mpk.wroc.pl/bus_position");
     QNetworkRequest request(url);
-
-    // 2. Dodanie nagłówków (Headers) - odpowiednik CURLOPT_USERAGENT z curl
-    request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-    
-    // Ważne przy wysyłaniu formularzy POST (żeby serwer wiedział, jak czytać dane)
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
-
-    // 3. Przygotowanie danych do wysłania (odpowiednik CURLOPT_POSTFIELDS)
-    QByteArray postData = "busList[bus][]=D&busList[bus][]=145";
-
-    // 4. Wykonanie zapytania POST (wcześniej było GET)
+    QByteArray postData = "busList[bus][]=1&busList[bus][]=16&busList[bus][]=145&busList[bus][]=149";
     networkManager->post(request, postData);
 }
 
+/**
+ * @brief Przetwarza otrzymane dane JSON.
+ * * Sprawdza błędy sieciowe, parsuje tablicę pojazdów i filtruje je
+ * zgodnie z ustawieniami użytkownika w QListWidget.
+ * @param reply Obiekt odpowiedzi sieciowej.
+ */
 void MainWindow::onResult(QNetworkReply* reply) {
     if (reply->error() == QNetworkReply::NoError) {
-        QByteArray response = reply->readAll();
-        QJsonDocument jsonDoc = QJsonDocument::fromJson(response);
-        
-        // Zgodnie z Twoim wcześniejszym kodem, serwer zwraca tablicę obiektów
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(reply->readAll());
         if(jsonDoc.isArray()) {
             QJsonArray records = jsonDoc.array();
             
-            logConsole->append(QString("<br><i>[%1] Odebrano pozycje %2 pojazdów</i>")
-                               .arg(QDateTime::currentDateTime().toString("HH:mm:ss"))
-                               .arg(records.size()));
-
-            // Przeszukiwanie paczki danych i wyciąganie tych samych parametrów co w starym kodzie
-            for (int i = 0; i < records.size(); ++i) {
-                QJsonObject vehicle = records[i].toObject();
-                
-                int id = vehicle["k"].toInt();           // Twoje "k" z JSONa
-                QString name = vehicle["name"].toString(); // Twoje "name" z JSONa
-                double x = vehicle["x"].toDouble();      // Długość geogr.
-                double y = vehicle["y"].toDouble();      // Szerokość geogr.
-                
-                logConsole->append(QString("[AKTUALIZACJA] Linia: <b>%1</b> | ID: %2 | Poz -> X: %3, Y: %4")
-                                   .arg(name)
-                                   .arg(id)
-                                   .arg(x, 0, 'f', 4) // Formatowanie do 4 miejsc po przecinku
-                                   .arg(y, 0, 'f', 4));
+            // Pobranie listy aktywnych filtrów
+            QStringList activeFilters;
+            for(int i = 0; i < lineFilterList->count(); ++i) {
+                if(lineFilterList->item(i)->checkState() == Qt::Checked)
+                    activeFilters.append(lineFilterList->item(i)->text());
             }
-        } else {
-            logConsole->append("<b>[BŁĄD]</b> Otrzymano nieprawidłowy format JSON z MPK.");
+
+            // Iteracja po wszystkich pojazdach w paczce danych
+            for (const QJsonValue& val : records) {
+                QJsonObject obj = val.toObject();
+                QString lineName = obj["name"].toString();
+                
+                // Wyświetlanie tylko zaznaczonych linii
+                if(activeFilters.contains(lineName)) {
+                    QString log = QString("%1 | %2 | ID: %3 | X: %4 | Y: %5")
+                        .arg(QDateTime::currentDateTime().toString("HH:mm:ss"), -10)
+                        .arg("Linia " + lineName, -12)
+                        .arg(QString::number(obj["k"].toInt()), -10)
+                        .arg(obj["x"].toDouble(), 8, 'f', 4)
+                        .arg(obj["y"].toDouble(), 8, 'f', 4);
+                    logConsole->append(log);
+                }
+            }
         }
-    } else {
-        logConsole->append("<b>[BŁĄD SIECI]</b> " + reply->errorString());
-        generateSimulatedData(); // Uruchomi się, jeśli serwer MPK przestanie odpowiadać
     }
     reply->deleteLater();
 }
 
-void MainWindow::generateSimulatedData() {
-    logConsole->append("[SYMULACJA] Tryb awaryjny - generowanie danych lokalnych.");
-    // Pozostałość z trybu awaryjnego (uruchomi się tylko przy braku internetu)
-}
-
+/**
+ * @brief Destruktor klasy.
+ */
 MainWindow::~MainWindow() {}

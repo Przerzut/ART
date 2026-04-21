@@ -1,0 +1,57 @@
+# --- PROJEKT ---
+PROJECT_NAME           = "Analizator Ruchu Tramwajowego (ART)"
+PROJECT_NUMBER         = 0.1
+PROJECT_BRIEF          = "Wizualizacja danych sensorycznych GPS MPK Wrocław"
+OUTPUT_DIRECTORY       = doc
+OUTPUT_LANGUAGE        = Polish
+DOXYFILE_ENCODING      = UTF-8
+
+# --- BUDOWANIE (KLUCZOWE DLA WIDOCZNOŚCI FUNKCJI) ---
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_PACKAGE        = YES
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = YES
+EXTRACT_LOCAL_METHODS  = YES
+SHOW_INCLUDE_FILES     = YES
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+OPTIMIZE_OUTPUT_FOR_C  = NO
+
+# --- WEJŚCIE ---
+# Kropka oznacza, że Doxygen szuka plików w tym samym folderze co Doxyfile
+INPUT                  = .
+FILE_PATTERNS          = *.cpp *.h *.md
+RECURSIVE              = YES
+EXCLUDE                = build
+
+# --- WYGLĄD HTML ---
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+HTML_FILE_EXTENSION    = .html
+
+# WŁĄCZENIE BOCZNEGO PASKA (TREEVIEW)
+GENERATE_TREEVIEW      = YES
+TREEVIEW_WIDTH         = 250
+DISABLE_INDEX          = NO
+FULL_PATH_NAMES        = NO
+
+# --- DIAGRAMY (WYMAGA GRAPHVIZ) ---
+HAVE_DOT               = YES
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = YES
+GROUP_GRAPHS           = YES
+UML_LOOK               = YES
+TEMPLATE_RELATIONS     = YES
+INCLUDE_GRAPH          = YES
+INCLUDED_BY_GRAPH      = YES
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
+DIRECTORY_GRAPH        = YES
+DOT_GRAPH_MAX_NODES    = 50
+MAX_DOT_GRAPH_DEPTH    = 0
+DOT_TRANSPARENT        = NO
+
+# --- INNE ---
+GENERATE_LATEX         = NO
+SEARCHENGINE           = NO

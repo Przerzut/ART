@@ -37,3 +37,9 @@ Thumbs.db
 .DS_Store
 *~
 *.swp
+
+# Ignoruj foldery Doxygena niezależnie od lokalizacji
+html/
+latex/
+doc/
+*.bak

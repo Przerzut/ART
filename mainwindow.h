@@ -1,3 +1,11 @@
+/**
+ * @file mainwindow.h
+ * @brief Plik nagłówkowy głównego okna aplikacji ART (Analizator Ruchu Tramwajowego).
+ * * Zawiera definicję klasy MainWindow, która zarządza interfejsem graficznym,
+ * filtrowaniem linii oraz asynchronicznym pobieraniem danych sensorycznych GPS.
+ * Projekt realizowany w ramach kursu "Wizualizacja Danych Sensorycznych".
+ */
+
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
@@ -9,11 +17,13 @@
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QPushButton>
+#include <QLabel>
 
 /**
- * @brief Główna klasa aplikacji Analizator Ruchu Tramwajowego (ART).
- * Odpowiada za wyświetlanie interfejsu GUI oraz zarządzanie logiką pobierania
- * i parsowania danych sensorycznych (GPS) z API.
+ * @class MainWindow
+ * @brief Klasa okna głównego aplikacji.
+ * * Klasa odpowiada za realizację scenariuszy monitorowania pojazdów MPK Wrocław,
+ * obsługę mechanizmu sygnałów i slotów Qt oraz dynamiczną zmianę języka interfejsu.
  */
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -21,44 +31,66 @@ class MainWindow : public QMainWindow {
 public:
     /**
      * @brief Konstruktor klasy MainWindow.
-     * @param parent Rodzic widżetu (domyślnie nullptr).
+     * @param parent Wskaźnik na obiekt nadrzędny (domyślnie nullptr).
      */
     explicit MainWindow(QWidget *parent = nullptr);
+
+    /**
+     * @brief Destruktor klasy MainWindow.
+     * Zwalnia zasoby i czyści obiekty powiązane z klasą.
+     */
     ~MainWindow();
 
 private slots:
     /**
-     * @brief Rozpoczyna lub zatrzymuje cykliczne pobieranie danych.
+     * @brief Slot przełączający stan monitoringu (START/STOP).
+     * Uruchamia lub zatrzymuje QTimer odpowiedzialny za cykliczne odpytywanie API.
      */
     void toggleTracking();
 
     /**
-     * @brief Inicjuje żądanie HTTP do miejskiego API w celu pobrania pozycji tramwajów.
+     * @brief Wykonuje asynchroniczne żądanie HTTP POST do serwera pozycji pojazdów.
+     * Wykorzystuje QNetworkAccessManager do pobrania aktualnego stanu floty.
      */
     void fetchTramData();
 
     /**
-     * @brief Obsługuje odpowiedź z serwera i parsuje format JSON.
-     * @param reply Odpowiedź sieciowa.
+     * @brief Slot wywoływany po zakończeniu operacji sieciowej.
+     * Odpowiada za parsowanie danych JSON i wyświetlanie ich w konsoli logów.
+     * @param reply Wskaźnik na odpowiedź sieciową.
      */
     void onResult(QNetworkReply* reply);
 
+    /**
+     * @brief Slot zmieniający wersję językową aplikacji (PL/EN).
+     * Aktualizuje teksty wszystkich etykiet i przycisków w interfejsie.
+     */
+    void toggleLanguage(); 
+
 private:
+    /**
+     * @brief Inicjalizuje graficzny interfejs użytkownika.
+     * Tworzy layouty, przyciski, listę filtrów oraz konsolę logów zgodnie z makietą.
+     */
     void setupUI();
-    void generateSimulatedData(); // Metoda ratunkowa (fallback) w razie awarii API
 
-    // Moduły logiki
-    QNetworkAccessManager* networkManager;
-    QTimer* dataTimer;
-    bool isTracking;
+    // --- Logika biznesowa ---
+    QNetworkAccessManager* networkManager; ///< Menedżer operacji sieciowych.
+    QTimer* dataTimer;                     ///< Timer do cyklicznego odświeżania danych (interwał 10s).
+    bool isTracking;                       ///< Flaga określająca, czy monitoring jest aktywny.
+    bool isPolish;                         ///< Flaga określająca aktualnie wybrany język interfejsu.
 
-    // Elementy GUI
-    QPushButton* btnToggle;
-    QListWidget* lineFilterList;
-    QTabWidget* mainTabs;
-    QTextEdit* logConsole;      // Zakładka 1: Logi (w przyszłości Mapa)
-    QWidget* speedChartTab;     // Zakładka 2: Miejsce na wykres prędkości
-    QWidget* delayChartTab;     // Zakładka 3: Miejsce na wykres opóźnień
+    // --- Wskaźniki do elementów GUI ---
+    QPushButton* btnToggle;      ///< Przycisk START/STOP sterujący strumieniem danych.
+    QPushButton* btnLang;        ///< Przycisk zmiany języka.
+    QLabel* statusLabel;         ///< Etykieta statusu połączenia.
+    QLabel* filterLabel;         ///< Nagłówek sekcji filtrowania.
+    QLabel* headerLabel;         ///< Główny nagłówek monitora trasy.
+    QListWidget* lineFilterList; ///< Lista linii z Checkboxami do filtrowania.
+    QTabWidget* mainTabs;        ///< Kontener zakładek dla wykresów analitycznych.
+    QTextEdit* logConsole;       ///< Konsola wyświetlająca surowe dane sensoryczne w czasie rzeczywistym.
+    QWidget* speedChartTab;      ///< Zakładka przeznaczona na wykres prędkości.
+    QWidget* delayChartTab;      ///< Zakładka przeznaczona na wykres opóźnień.
 };
 
 #endif // MAINWINDOW_H
