@@ -15,6 +15,7 @@ add_executable(AnalizatorTramwajowy
     main.cpp
     mainwindow.cpp
     mainwindow.h
+    resources.qrc
 )
 
 # Łączenie bibliotek z Twoim programem

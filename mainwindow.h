@@ -18,6 +18,8 @@
 #include <QTextEdit>
 #include <QPushButton>
 #include <QLabel>
+#include <QTranslator> // Dodano: Obsługa wczytywania plików z tłumaczeniami
+#include <QEvent>      // Dodano: Obsługa zdarzeń systemowych (zmiana języka)
 
 /**
  * @class MainWindow
@@ -41,6 +43,14 @@ public:
      */
     ~MainWindow();
 
+protected:
+    /**
+     * @brief Przechwytuje zdarzenia zmiany stanu aplikacji.
+     * Wykorzystywane do automatycznego odświeżania GUI po zmianie języka (QEvent::LanguageChange).
+     * @param event Wskaźnik na obiekt zdarzenia.
+     */
+    void changeEvent(QEvent *event) override;
+
 private slots:
     /**
      * @brief Slot przełączający stan monitoringu (START/STOP).
@@ -62,22 +72,29 @@ private slots:
     void onResult(QNetworkReply* reply);
 
     /**
-     * @brief Slot zmieniający wersję językową aplikacji (PL/EN).
-     * Aktualizuje teksty wszystkich etykiet i przycisków w interfejsie.
+     * @brief Slot ładujący odpowiedni plik z tłumaczeniem (.qm).
+     * Instaluje lub odinstalowuje obiekt QTranslator w globalnej instancji aplikacji.
      */
     void toggleLanguage(); 
 
 private:
     /**
      * @brief Inicjalizuje graficzny interfejs użytkownika.
-     * Tworzy layouty, przyciski, listę filtrów oraz konsolę logów zgodnie z makietą.
+     * Tworzy layouty, obiekty widżetów oraz konfiguruje układ (bez przypisywania tekstów!).
      */
     void setupUI();
 
+    /**
+     * @brief Aktualizuje wszystkie teksty w interfejsie.
+     * Wywoływana przy starcie aplikacji oraz po każdym zdarzeniu zmiany języka.
+     */
+    void retranslateUi();
+
+    QTranslator appTranslator;             ///< Obiekt tłumacza ładujący pliki językowe.
     QNetworkAccessManager* networkManager; ///< Menedżer operacji sieciowych.
     QTimer* dataTimer;                     ///< Timer do cyklicznego odświeżania danych (interwał 10s).
     bool isTracking;                       ///< Flaga określająca, czy monitoring jest aktywny.
-    bool isPolish;                         ///< Flaga określająca aktualnie wybrany język interfejsu.
+    bool isPolish;                         ///< Flaga określająca aktualnie wybrany język (do przełączania).
 
     QPushButton* btnToggle;      ///< Przycisk START/STOP sterujący strumieniem danych.
     QPushButton* btnLang;        ///< Przycisk zmiany języka.
