@@ -26,7 +26,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), isTracking(false)
     networkManager = new QNetworkAccessManager(this);
     dataTimer = new QTimer(this);
 
-    // Połączenie logiki przycisków i zdarzeń czasowych
     connect(btnToggle, &QPushButton::clicked, this, &MainWindow::toggleTracking);
     connect(btnLang, &QPushButton::clicked, this, &MainWindow::toggleLanguage);
     connect(dataTimer, &QTimer::timeout, this, &MainWindow::fetchTramData);
@@ -42,7 +41,6 @@ void MainWindow::setupUI() {
     QWidget *centralWidget = new QWidget(this);
     QHBoxLayout *mainLayout = new QHBoxLayout(centralWidget);
 
-    // --- PANEL BOCZNY ---
     QVBoxLayout *sidePanelLayout = new QVBoxLayout();
     
     btnLang = new QPushButton("Zmień język (EN)", this);
@@ -55,7 +53,6 @@ void MainWindow::setupUI() {
     filterLabel = new QLabel("<b>Filtrowanie linii:</b>", this);
     lineFilterList = new QListWidget(this);
     
-    // Inicjalizacja listy linii do śledzenia
     QStringList linie = {"1", "16", "145", "149"};
     for(const QString& linia : linie) {
         QListWidgetItem* item = new QListWidgetItem(linia, lineFilterList);
@@ -71,7 +68,6 @@ void MainWindow::setupUI() {
     sidePanelLayout->addWidget(lineFilterList);
     sidePanelLayout->addStretch();
 
-    // --- PANEL GŁÓWNY ---
     QVBoxLayout *rightPanelLayout = new QVBoxLayout();
     
     headerLabel = new QLabel("<b>MONITOR TRASY - DANE SENSORYCZNE LIVE</b>", this);
@@ -79,7 +75,6 @@ void MainWindow::setupUI() {
     logConsole = new QTextEdit(this);
     logConsole->setReadOnly(true);
     logConsole->setMinimumHeight(250);
-    // Stylizacja konsoli: czarne tło, zielony tekst, zachowanie spacji (white-space)
     logConsole->setStyleSheet("background-color: #000000; color: #00FF00; font-family: 'Courier New';  white-space: pre;");
 
     mainTabs = new QTabWidget(this);
@@ -115,7 +110,6 @@ void MainWindow::toggleLanguage() {
         statusLabel->setText(tr("Status: Aktywny"));
         headerLabel->setText(tr("<b>MONITOR TRASY - DANE SENSORYCZNE LIVE</b>"));
         
-        // Tłumaczenie elementów, o które pytałeś:
         filterLabel->setText(tr("<b>Filtrowanie linii:</b>"));
         mainTabs->setTabText(0, tr("Prędkość [km/h]"));
         mainTabs->setTabText(1, tr("Opóźnienie [min]"));
@@ -126,7 +120,6 @@ void MainWindow::toggleLanguage() {
         statusLabel->setText(tr("Status: Active"));
         headerLabel->setText(tr("<b>ROUTE MONITOR - LIVE SENSORY DATA</b>"));
         
-        // Angielskie odpowiedniki:
         filterLabel->setText(tr("<b>Line Filtering:</b>"));
         mainTabs->setTabText(0, tr("Speed [km/h]"));
         mainTabs->setTabText(1, tr("Delay [min]"));
@@ -143,7 +136,6 @@ void MainWindow::toggleTracking() {
         btnToggle->setText("STOP");
         btnToggle->setStyleSheet("background-color: #c62828; color: white; font-weight: bold; ");
         
-        // Formatowanie nagłówka tabeli danych
         QString header = QString("<b>%1 | %2 | %3 | %4 | %5</b>")
                        .arg(isPolish ? "CZAS" : "TIME", -10)
                        .arg(isPolish ? "LINIA" : "LINE", -12)
@@ -151,7 +143,7 @@ void MainWindow::toggleTracking() {
                        .arg(isPolish ? "POZ_X" : "POS_X", -11)
                        .arg(isPolish ? "POZ_Y" : "POS_Y", -10);
         
-        header.replace(" ", "&nbsp;"); // Wymuszenie zachowania spacji w HTML
+        header.replace(" ", "&nbsp;");
         logConsole->append(header);
         logConsole->append(QString(70, '-')); 
     
@@ -196,12 +188,10 @@ void MainWindow::onResult(QNetworkReply* reply) {
                     activeFilters.append(lineFilterList->item(i)->text());
             }
 
-            // Iteracja po wszystkich pojazdach w paczce danych
             for (const QJsonValue& val : records) {
                 QJsonObject obj = val.toObject();
                 QString lineName = obj["name"].toString();
                 
-                // Wyświetlanie tylko zaznaczonych linii
                 if(activeFilters.contains(lineName)) {
                     QString log = QString("%1 | %2 | ID: %3 | X: %4 | Y: %5")
                         .arg(QDateTime::currentDateTime().toString("HH:mm:ss"), -10)

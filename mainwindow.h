@@ -74,13 +74,11 @@ private:
      */
     void setupUI();
 
-    // --- Logika biznesowa ---
     QNetworkAccessManager* networkManager; ///< Menedżer operacji sieciowych.
     QTimer* dataTimer;                     ///< Timer do cyklicznego odświeżania danych (interwał 10s).
     bool isTracking;                       ///< Flaga określająca, czy monitoring jest aktywny.
     bool isPolish;                         ///< Flaga określająca aktualnie wybrany język interfejsu.
 
-    // --- Wskaźniki do elementów GUI ---
     QPushButton* btnToggle;      ///< Przycisk START/STOP sterujący strumieniem danych.
     QPushButton* btnLang;        ///< Przycisk zmiany języka.
     QLabel* statusLabel;         ///< Etykieta statusu połączenia.
