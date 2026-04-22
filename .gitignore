@@ -43,3 +43,7 @@ html/
 latex/
 doc/
 *.bak
+
+AnalizatorTramwajowy
+AnalizatorTramwajowy_autogen/
+cmake_install.cmake
