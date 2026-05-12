@@ -1,6 +1,8 @@
 /**
  * @file mainwindow.cpp
- * @brief Implementacja logiki głównego okna z poprawnym mapowaniem API MPK i trybem AUTO.
+ * @brief Implementacja logiki głównego okna aplikacji Analizator Tramwajowy (ART).
+ * @details Zawiera definicje metod odpowiedzialnych za komunikację z API MPK, 
+ * przetwarzanie danych GPS, obliczanie prędkości oraz wizualizację na mapie i wykresach.
  */
 
 #include "mainwindow.h"
@@ -16,6 +18,11 @@
 #include <QSet>
 #include <limits>
 
+/**
+ * @brief Konstruktor klasy MainWindow.
+ * @details Inicjalizuje interfejs użytkownika, trasę, wykresy oraz menedżery sieci i timerów.
+ * @param parent Wskaźnik na obiekt nadrzędny (domyślnie nullptr).
+ */
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), isTracking(false), isPolish(false), startTime(0), currentTrackedId(-1) {
     setupUI();
     initHardcodedRoute(); 
@@ -27,7 +34,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), isTracking(false)
 
     animTimer = new QTimer(this);
     connect(animTimer, &QTimer::timeout, this, &MainWindow::animateTrams);
-    animTimer->start(33);
+    animTimer->start(33); // Ok. 30 klatek na sekundę dla płynnej animacji
 
     connect(btnToggle, &QPushButton::clicked, this, &MainWindow::toggleTracking);
     connect(btnLang, &QPushButton::clicked, this, &MainWindow::toggleLanguage);
@@ -36,6 +43,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), isTracking(false)
     connect(tramIdComboBox, &QComboBox::currentTextChanged, this, &MainWindow::onTrackedTramChanged);
 }
 
+/**
+ * @brief Tworzy i układa widżety w głównym oknie.
+ * @details Buduje boczny panel sterowania oraz główny panel z konsolą logów i zakładkami wykresów.
+ */
 void MainWindow::setupUI() {
     QWidget *centralWidget = new QWidget(this);
     QHBoxLayout *mainLayout = new QHBoxLayout(centralWidget);
@@ -51,7 +62,7 @@ void MainWindow::setupUI() {
     filterLabel = new QLabel(this);
     lineFilterList = new QListWidget(this);
     
-    // TYLKO LINIA 16 ZGODNIE Z ZAŁOŻENIEM
+    // TYLKO LINIA 16 ZGODNIE Z ZAŁOŻENIEM PROJEKTOWYM
     QStringList linie = {"16"}; 
     for(const QString& linia : linie) {
         QListWidgetItem* item = new QListWidgetItem(linia, lineFilterList);
@@ -100,6 +111,10 @@ void MainWindow::setupUI() {
     resize(1050, 750);
 }
 
+/**
+ * @brief Inicjalizuje punkty kontrolne trasy (Linii 16).
+ * @details Definiuje łamaną torowiska, do której będą snapowane surowe pozycje GPS.
+ */
 void MainWindow::initHardcodedRoute() {
     routePoints.clear();
     routePoints.append(QPointF(17.0601, 51.0775));
@@ -114,6 +129,11 @@ void MainWindow::initHardcodedRoute() {
     routePoints.append(QPointF(16.9950, 51.1390));
 }
 
+/**
+ * @brief Konfiguruje system wykresów Qt Charts.
+ * @details Tworzy serię danych dla prędkości, trasę torowiska oraz dwie serie punktów dla mapy 
+ * (zwykłe oraz wybrany pojazd).
+ */
 void MainWindow::setupCharts() {
     speedSeries = new QLineSeries();
     QPen speedPen(Qt::blue); speedPen.setWidth(2); speedSeries->setPen(speedPen);
@@ -167,6 +187,10 @@ void MainWindow::setupCharts() {
     mapLayout->setContentsMargins(0, 0, 0, 0); mapLayout->addWidget(mapView);
 }
 
+/**
+ * @brief Aktualizuje teksty w interfejsie użytkownika.
+ * @details Ustawia etykiety i nazwy zakładek korzystając z makra tr(), co pozwala na lokalizację językową.
+ */
 void MainWindow::retranslateUi() {
     btnLang->setText(tr("Change Language (PL)"));
     btnToggle->setText(isTracking ? tr("STOP") : tr("START"));
@@ -179,11 +203,19 @@ void MainWindow::retranslateUi() {
     setWindowTitle(tr("ART - Tram Traffic Analyzer"));
 }
 
+/**
+ * @brief Obsługuje zdarzenia zmiany stanu aplikacji (np. język).
+ * @param event Wskaźnik na obiekt zdarzenia.
+ */
 void MainWindow::changeEvent(QEvent *event) {
     if (event->type() == QEvent::LanguageChange) retranslateUi();
     QMainWindow::changeEvent(event);
 }
 
+/**
+ * @brief Przełącza język aplikacji między polskim a angielskim.
+ * @details Ładuje odpowiedni plik .qm z zasobów i instaluje translator w aplikacji.
+ */
 void MainWindow::toggleLanguage() {
     isPolish = !isPolish; 
     if (isPolish) {
@@ -194,10 +226,14 @@ void MainWindow::toggleLanguage() {
     retranslateUi(); 
 }
 
+/**
+ * @brief Rozpoczyna lub zatrzymuje proces śledzenia danych.
+ * @details Czyści logi, resetuje czas startu i aktywuje timer odpytywania sieci.
+ */
 void MainWindow::toggleTracking() {
     if(!isTracking) {
         startTime = QDateTime::currentMSecsSinceEpoch(); 
-        dataTimer->start(10000); 
+        dataTimer->start(10000); // Odświeżanie co 10 sekund
         isTracking = true;
         retranslateUi();
         btnToggle->setStyleSheet("background-color: #c62828; color: white; font-weight: bold; ");
@@ -218,6 +254,9 @@ void MainWindow::toggleTracking() {
     }
 }
 
+/**
+ * @brief Konstruuje i wysyła zapytanie HTTP POST do API MPK Wrocław.
+ */
 void MainWindow::fetchTramData() {
     QUrl url("https://mpk.wroc.pl/bus_position");
     QNetworkRequest request(url);
@@ -234,6 +273,14 @@ void MainWindow::fetchTramData() {
     networkManager->post(request, postString.toUtf8());
 }
 
+/**
+ * @brief Wykonuje proces "Map Matching" dla zadanych współrzędnych.
+ * @details Rzutuje punkt GPS na najbliższy segment torowiska, uwzględniając korektę 
+ * długości geograficznej (cosinus szerokości).
+ * @param lon Długość geograficzna.
+ * @param lat Szerokość geograficzna.
+ * @return QPointF Punkt skorygowany do trasy.
+ */
 QPointF MainWindow::snapToRoute(double lon, double lat) {
     if (routePoints.isEmpty()) return QPointF(lon, lat);
     QPointF bestPoint(lon, lat);
@@ -263,6 +310,15 @@ QPointF MainWindow::snapToRoute(double lon, double lat) {
     return bestPoint;
 }
 
+/**
+ * @brief Oblicza prędkość na podstawie dwóch punktów GPS (Wzór Haversine'a).
+ * @param lon1 Długość punktu poprzedniego.
+ * @param lat1 Szerokość punktu poprzedniego.
+ * @param lon2 Długość punktu bieżącego.
+ * @param lat2 Szerokość punktu bieżącego.
+ * @param timeDiffMs Różnica czasu w milisekundach.
+ * @return Prędkość w km/h.
+ */
 double MainWindow::calculateSpeed(double lon1, double lat1, double lon2, double lat2, qint64 timeDiffMs) {
     if (timeDiffMs <= 0) return 0.0;
     double R = 6371.0; 
@@ -272,6 +328,10 @@ double MainWindow::calculateSpeed(double lon1, double lat1, double lon2, double 
     return (R * c) / (timeDiffMs / 1000.0 / 3600.0);
 }
 
+/**
+ * @brief Realizuje płynną animację przemieszczania się tramwajów.
+ * @details Funkcja wywoływana cyklicznie przez animTimer. Przesuwa kropki w stronę celu o 5% dystansu na klatkę.
+ */
 void MainWindow::animateTrams() {
     if (targetAnimPositions.isEmpty()) return;
     
@@ -279,7 +339,6 @@ void MainWindow::animateTrams() {
     QList<QPointF> selectedPoints;
     bool needsUpdate = false;
     
-    // Logika dla trybu AUTO - podświetla pierwszy tramwaj, jeśli nie wybrano konkretnego
     int renderTrackedId = currentTrackedId;
     if (renderTrackedId == -1 && !targetAnimPositions.isEmpty()) {
         renderTrackedId = targetAnimPositions.keys().first();
@@ -310,6 +369,10 @@ void MainWindow::animateTrams() {
     }
 }
 
+/**
+ * @brief Obsługuje zmianę śledzonego tramwaju przez użytkownika.
+ * @param text Tekst z ComboBoxa (ID pojazdu lub AUTO).
+ */
 void MainWindow::onTrackedTramChanged(const QString &text) {
     if (text == "AUTO") {
         currentTrackedId = -1;
@@ -329,6 +392,10 @@ void MainWindow::onTrackedTramChanged(const QString &text) {
     logConsole->append(tr("<i>[SYSTEM] Switched view to vehicle ID: %1</i>").arg(text));
 }
 
+/**
+ * @brief Usuwa pojazdy, które nie pojawiły się w raporcie API przez ponad 60 sekund.
+ * @param currentTime Bieżący czas systemowy w ms.
+ */
 void MainWindow::cleanUpStaleTrams(qint64 currentTime) {
     QList<int> toRemove;
     for (auto it = previousPositions.constBegin(); it != previousPositions.constEnd(); ++it) {
@@ -353,6 +420,12 @@ void MainWindow::cleanUpStaleTrams(qint64 currentTime) {
     }
 }
 
+/**
+ * @brief Slot obsługujący odpowiedź serwera z danymi o pozycjach.
+ * @details Parsuje JSON, oblicza prędkości dla wszystkich pojazdów, loguje dane do konsoli 
+ * i odświeża serie danych wykresów.
+ * @param reply Wskaźnik na odpowiedź sieciową.
+ */
 void MainWindow::onResult(QNetworkReply* reply) {
     if (reply->error() != QNetworkReply::NoError) {
         logConsole->append(tr("<i>[ERROR] API Failure: %1</i>").arg(reply->errorString()));
@@ -380,7 +453,7 @@ void MainWindow::onResult(QNetworkReply* reply) {
             if(activeFilters.contains(lineName)) {
                 int id = obj["k"].toInt();
                 
-                // ROZWIĄZANIE PROBLEMU API: x to Latitude (Wrocław: 51.xx), y to Longitude (Wrocław: 17.xx)
+                // POPRAWKA API: x to Szerokość (51.xx), y to Długość (17.xx) we Wrocławiu
                 double currentLat = obj["x"].toDouble(); 
                 double currentLon = obj["y"].toDouble(); 
                 
@@ -400,6 +473,7 @@ void MainWindow::onResult(QNetworkReply* reply) {
                     if (prev.lon != currentLon || prev.lat != currentLat) {
                         double rawSpeed = calculateSpeed(prev.lon, prev.lat, currentLon, currentLat, currentTime - prev.timestampMs);
                         
+                        // FILTRACJA OUTLIERÓW (Błędy GPS powyżej 75km/h są ignorowane)
                         if (rawSpeed <= 75.0) {
                             speedBuffers[id].append(rawSpeed);
                             if (speedBuffers[id].size() > 3) speedBuffers[id].removeFirst(); 
@@ -411,7 +485,6 @@ void MainWindow::onResult(QNetworkReply* reply) {
                             speedHistories[id].append(QPointF(currentSecs, smoothedSpeed));
                             if (speedHistories[id].size() > 50) speedHistories[id].removeFirst();
 
-                            // Dodanie do wykresu
                             if (id == currentTrackedId || (currentTrackedId == -1 && activeTargetId == -1)) {
                                 speedSeries->append(currentSecs, smoothedSpeed);
                             }
@@ -435,4 +508,7 @@ void MainWindow::onResult(QNetworkReply* reply) {
     reply->deleteLater();
 }
 
+/**
+ * @brief Destruktor okna głównego.
+ */
 MainWindow::~MainWindow() {}
