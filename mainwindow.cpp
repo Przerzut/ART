@@ -62,7 +62,6 @@ void MainWindow::setupUI() {
     filterLabel = new QLabel(this);
     lineFilterList = new QListWidget(this);
     
-    // TYLKO LINIA 16 ZGODNIE Z ZAŁOŻENIEM PROJEKTOWYM
     QStringList linie = {"16"}; 
     for(const QString& linia : linie) {
         QListWidgetItem* item = new QListWidgetItem(linia, lineFilterList);
@@ -233,7 +232,7 @@ void MainWindow::toggleLanguage() {
 void MainWindow::toggleTracking() {
     if(!isTracking) {
         startTime = QDateTime::currentMSecsSinceEpoch(); 
-        dataTimer->start(10000); // Odświeżanie co 10 sekund
+        dataTimer->start(10000);
         isTracking = true;
         retranslateUi();
         btnToggle->setStyleSheet("background-color: #c62828; color: white; font-weight: bold; ");
@@ -453,7 +452,6 @@ void MainWindow::onResult(QNetworkReply* reply) {
             if(activeFilters.contains(lineName)) {
                 int id = obj["k"].toInt();
                 
-                // POPRAWKA API: x to Szerokość (51.xx), y to Długość (17.xx) we Wrocławiu
                 double currentLat = obj["x"].toDouble(); 
                 double currentLon = obj["y"].toDouble(); 
                 
@@ -473,7 +471,6 @@ void MainWindow::onResult(QNetworkReply* reply) {
                     if (prev.lon != currentLon || prev.lat != currentLat) {
                         double rawSpeed = calculateSpeed(prev.lon, prev.lat, currentLon, currentLat, currentTime - prev.timestampMs);
                         
-                        // FILTRACJA OUTLIERÓW (Błędy GPS powyżej 75km/h są ignorowane)
                         if (rawSpeed <= 75.0) {
                             speedBuffers[id].append(rawSpeed);
                             if (speedBuffers[id].size() > 3) speedBuffers[id].removeFirst(); 

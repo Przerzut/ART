@@ -113,7 +113,6 @@ private:
     /** @brief Usuwa pojazdy, które nie wysłały danych przez określony czas. */
     void cleanUpStaleTrams(qint64 currentTime);
 
-    // Członkowie klasy (atrybuty)
     QTranslator appTranslator;
     QNetworkAccessManager* networkManager;
     QTimer* dataTimer;
@@ -131,7 +130,6 @@ private:
     QMap<int, QPointF> targetAnimPositions;  
     QVector<QPointF> routePoints; 
 
-    // Elementy GUI
     QPushButton* btnToggle;
     QPushButton* btnLang;
     QLabel* statusLabel;
@@ -145,7 +143,6 @@ private:
     QWidget* speedChartTab;      
     QWidget* mapChartTab;        
 
-    // Wykresy
     QChart *speedChart;
     QLineSeries *speedSeries;
     QValueAxis *speedAxisX;
