@@ -37,8 +37,9 @@
 #include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), isTracking(false), isPolish(false), startTime(0), currentTrackedId(-1) {
-    // 1. Ładujemy trasę z Twojego pliku GeoJSON
-    loadRouteFromJson();
+
+    loadRouteFromJson("16", ":/trasa16.geojson");
+
 
     m_tramModel = new TramModel(this);
     m_quickWidget = new QQuickWidget(this);
@@ -67,12 +68,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), isTracking(false)
     connect(tramIdComboBox, &QComboBox::currentTextChanged, this, &MainWindow::onTrackedTramChanged);
 }
 
-// NOWA FUNKCJA DO ŁADOWANIA GEOJSON
-void MainWindow::loadRouteFromJson() {
-    routePoints.clear();
-    QFile file(":/trasa16.geojson"); // Upewnij się, że plik jest w qrc
+void MainWindow::loadRouteFromJson(const QString& lineName, const QString& filePath) {
+    QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qDebug() << "Nie można otworzyć pliku trasy!";
+        qDebug() << "Nie można otworzyć pliku trasy dla linii:" << lineName;
         return;
     }
 
@@ -80,15 +79,33 @@ void MainWindow::loadRouteFromJson() {
     QJsonObject root = doc.object();
     QJsonArray features = root["features"].toArray();
     
+    QVector<QPointF> currentRoute;
     for (const QJsonValue &feature : features) {
         QJsonObject geometry = feature.toObject()["geometry"].toObject();
+        QString geomType = geometry["type"].toString();
         QJsonArray coords = geometry["coordinates"].toArray();
-        for (const QJsonValue &coord : coords) {
-            QJsonArray point = coord.toArray();
-            routePoints.append(QPointF(point[0].toDouble(), point[1].toDouble()));
+        
+        // Jeśli tor jest zapisanym prostym odcinkiem
+        if (geomType == "LineString") {
+            for (const QJsonValue &coord : coords) {
+                QJsonArray point = coord.toArray();
+                currentRoute.append(QPointF(point[0].toDouble(), point[1].toDouble()));
+            }
+        } 
+        // Jeśli tor jest pocięty na wiele połączonych kawałków (Standardowy eksport całej Linii)
+        else if (geomType == "MultiLineString") {
+            for (const QJsonValue &lineSegment : coords) {
+                QJsonArray segmentCoords = lineSegment.toArray();
+                for (const QJsonValue &coord : segmentCoords) {
+                    QJsonArray point = coord.toArray();
+                    currentRoute.append(QPointF(point[0].toDouble(), point[1].toDouble()));
+                }
+            }
         }
     }
-    qDebug() << "Załadowano punktów z GeoJSON:" << routePoints.size();
+    
+    routes[lineName] = currentRoute; 
+    qDebug() << "Załadowano punktów dla linii" << lineName << ":" << currentRoute.size();
 }
 
 void MainWindow::setupUI() {
@@ -106,11 +123,21 @@ void MainWindow::setupUI() {
     filterLabel = new QLabel(this);
     lineFilterList = new QListWidget(this);
     
-    QStringList linie = {"16"}; 
-    for(const QString& linia : linie) {
-        QListWidgetItem* item = new QListWidgetItem(linia, lineFilterList);
-        item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
-        item->setCheckState(Qt::Checked);
+    QStringList linie = {
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", 
+    "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", 
+    "21", "22", "23", "24"
+};
+    for (const QString& linia : linie) {
+        QString filePath = QString(":/trasa%1.geojson").arg(linia);
+        
+        if (QFile::exists(filePath)) {
+            loadRouteFromJson(linia, filePath);
+            
+            QListWidgetItem* item = new QListWidgetItem(linia, lineFilterList);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
+            item->setCheckState(Qt::Checked);
+        }
     }
 
     tramIdLabel = new QLabel(this);
@@ -158,66 +185,20 @@ void MainWindow::setupUI() {
     mapLayout->addWidget(m_quickWidget);
 }
 
-void MainWindow::initHardcodedRoute() {
-    routePoints.clear();
+QVariantList MainWindow::routePaths() const {
+    QVariantList allPaths; // Główna lista przechowująca wszystkie trasy
     
-    // TRASA HIGH-RESOLUTION: LINIA 16 (Tarnogaj <-> Osobowice)
-    // Punkty ułożone bardzo gęsto, aby algorytm idealnie pokrywał się z ulicami i mostami.
-    
-    // --- Odcinek Południowy ---
-    routePoints.append(QPointF(17.0425, 51.0818)); // Tarnogaj Pętla
-    routePoints.append(QPointF(17.0410, 51.0855)); // Klimasa 
-    routePoints.append(QPointF(17.0402, 51.0890)); // Armii Krajowej 
-    routePoints.append(QPointF(17.0398, 51.0920)); // Bardzka 
-    routePoints.append(QPointF(17.0395, 51.0945)); // Hubska (Prudnicka)
-    routePoints.append(QPointF(17.0400, 51.0965)); // Hubska (Gliniana)
-    routePoints.append(QPointF(17.0405, 51.0980)); // Hubska (Dawida)
-    
-    // --- Odcinek Centrum (Dworzec, Pułaskiego) ---
-    routePoints.append(QPointF(17.0408, 51.0985)); // Skręt w Pułaskiego
-    routePoints.append(QPointF(17.0425, 51.0988)); // Pod Wiaduktem PKP
-    routePoints.append(QPointF(17.0440, 51.0995)); // Małachowskiego
-    routePoints.append(QPointF(17.0485, 51.1030)); // Kościuszki
-    routePoints.append(QPointF(17.0510, 51.1060)); // Plac Wróblewskiego (Start łuku)
-    
-    // --- Idealne wejście na Most Grunwaldzki (Brak cięcia przez wodę) ---
-    routePoints.append(QPointF(17.0520, 51.1075)); // Plac Społeczny
-    routePoints.append(QPointF(17.0535, 51.1085)); // Wjazd na Most Grunwaldzki
-    routePoints.append(QPointF(17.0545, 51.1090)); // Środek Mostu
-    routePoints.append(QPointF(17.0560, 51.1095)); // Zjazd z Mostu
-    routePoints.append(QPointF(17.0600, 51.1110)); // Oś Grunwaldzka
-    routePoints.append(QPointF(17.0620, 51.1118)); // Rondo Reagana
-    
-    // --- Odcinek Śródmieście (Piastowska, Nowowiejska) ---
-    routePoints.append(QPointF(17.0610, 51.1130)); // Skręt w Piastowską
-    routePoints.append(QPointF(17.0585, 51.1150)); // Piastowska / Sienkiewicza
-    routePoints.append(QPointF(17.0560, 51.1170)); // Piastowska (Północ)
-    routePoints.append(QPointF(17.0540, 51.1185)); // Skręt w Nowowiejską
-    routePoints.append(QPointF(17.0500, 51.1195)); // Wyszyńskiego
-    routePoints.append(QPointF(17.0450, 51.1210)); // Słowiańska
-    routePoints.append(QPointF(17.0380, 51.1220)); // Trzebnicka
-    routePoints.append(QPointF(17.0350, 51.1225)); // Dworzec Nadodrze
-    
-    // --- Odcinek Północny i Most Osobowicki ---
-    routePoints.append(QPointF(17.0320, 51.1235)); // Łuk na Staszica
-    routePoints.append(QPointF(17.0280, 51.1250)); // Plac Staszica
-    routePoints.append(QPointF(17.0220, 51.1280)); // Reymonta
-    routePoints.append(QPointF(17.0200, 51.1300)); // Wjazd na Most Osobowicki
-    routePoints.append(QPointF(17.0180, 51.1320)); // Środek Mostu Osobowickiego
-    routePoints.append(QPointF(17.0160, 51.1330)); // Zjazd z Mostu
-    
-    // --- Osobowicka ---
-    routePoints.append(QPointF(17.0120, 51.1350)); // Bałtycka
-    routePoints.append(QPointF(17.0080, 51.1360)); // Łużycka
-    routePoints.append(QPointF(16.9950, 51.1390)); // Pętla Osobowice
-}
-
-QVariantList MainWindow::routePath() const {
-    QVariantList path;
-    for (const QPointF& p : routePoints) {
-        path.append(QVariant::fromValue(QGeoCoordinate(p.y(), p.x())));
+    // Przechodzimy przez wszystkie załadowane trasy w naszym słowniku (routes)
+    for (auto it = routes.begin(); it != routes.end(); ++it) {
+        QVariantList singlePath; // Lista punktów dla jednej konkretnej trasy
+        for (const QPointF& p : it.value()) {
+            singlePath.append(QVariant::fromValue(QGeoCoordinate(p.y(), p.x())));
+        }
+        // Dodajemy gotową trasę do głównej listy
+        allPaths.append(QVariant::fromValue(singlePath)); 
     }
-    return path;
+    
+    return allPaths; // Zwracamy listę list (Matrix) do QML
 }
 
 void MainWindow::setupCharts() {
@@ -309,8 +290,12 @@ void MainWindow::fetchTramData() {
     networkManager->post(request, postString.toUtf8());
 }
 
-QPointF MainWindow::snapToRoute(double lon, double lat) {
-    if (routePoints.isEmpty()) return QPointF(lon, lat);
+QPointF MainWindow::snapToRoute(double lon, double lat, const QString& lineName) {
+    if (!routes.contains(lineName) || routes[lineName].isEmpty()) {
+        return QPointF(lon, lat); // Brak trasy w bazie -> rysuj surowy GPS
+    }
+    
+    const QVector<QPointF>& routePoints = routes[lineName];
     QPointF bestPoint(lon, lat);
     double minDistanceSq = std::numeric_limits<double>::max();
     QPointF P(lon, lat);
@@ -337,7 +322,6 @@ QPointF MainWindow::snapToRoute(double lon, double lat) {
     }
     return bestPoint;
 }
-
 double MainWindow::calculateSpeed(double lon1, double lat1, double lon2, double lat2, qint64 timeDiffMs) {
     if (timeDiffMs <= 0) return 0.0;
     double R = 6371.0; 
@@ -348,88 +332,85 @@ double MainWindow::calculateSpeed(double lon1, double lat1, double lon2, double 
 }
 
 /**
- * @brief Realizuje płynną animację przemieszczania się tramwajów (Dead Reckoning).
- * @details Silnik działa z częstotliwością ~30 FPS. Implementuje ruch jednostajny, a przy
- * braku nowych danych (ekstrapolacja) wprowadza fizyczne hamowanie tramwaju.
+ * @brief Realizuje płynną animację przemieszczania się tramwajów.
+ * @details Opiera się na kinematycznym wektorze prędkości. W każdej klatce (33ms) 
+ * przesuwa tramwaj zgodnie z jego wektorem, a następnie koryguje pozycję do krzywizny torów.
  */
 void MainWindow::animateTrams() {
     if (!isTracking || targetAnimPositions.isEmpty()) return;
 
-    double dt = 0.033; // 33ms na klatkę (dla pętli 30fps)
+    double dt = 0.033; // Czas trwania jednej klatki (30 FPS)
 
     for (int id : targetAnimPositions.keys()) {
         QPointF target = targetAnimPositions[id];
-        // Jeśli kropka nie istnieje w systemie animacji, zaczyna w punkcie target
         QPointF current = currentAnimPositions.value(id, target); 
+        QPointF oldCurrent = current; // Zapisujemy pozycję przed ruchem do obliczenia kąta!
 
-        // 1. Obliczanie średniej wygładzonej prędkości (z bufora)
+        // 1. Obliczanie uśrednionej prędkości z bufora
         double speedKmh = 0.0;
         if (speedBuffers.contains(id) && !speedBuffers[id].isEmpty()) {
             for (double s : speedBuffers[id]) speedKmh += s;
             speedKmh /= speedBuffers[id].size();
         }
 
-        // 2. Wyliczanie kąta obrotu (Heading) w stronę celu
-        double dx = target.x() - current.x();
-        double dy = target.y() - current.y();
-        double distanceDegrees = qSqrt(dx*dx + dy*dy);
-        double heading = qRadiansToDegrees(qAtan2(dy, dx)) * -1 + 90;
-
         // Jeśli tramwaj stoi w korku / na przystanku
         if (speedKmh < 1.0) {
             currentAnimPositions[id] = target;
-            m_tramModel->updateTram(id, "16", current.y(), current.x(), speedKmh, heading); 
+            m_tramModel->updateTram(id, "16", current.y(), current.x(), speedKmh, 0); 
             continue; 
         }
 
-        // 3. FIZYKA: Przemieszczanie (Dead Reckoning)
+        // 2. Wyliczanie maksymalnego dystansu dla tej klatki animacji
         double speedMs = speedKmh / 3.6;
-        double distanceMeters = speedMs * dt; 
-        
-        // Zgrubny przelicznik we Wrocławiu: 1 stopień to ok. 111 320 metrów
-        double maxDegreesPerFrame = distanceMeters / 111320.0;
+        double stepDegrees = (speedMs * dt) / 111320.0; 
 
-        // Scenariusz A: Tramwaj goni punkt z API
-        if (distanceDegrees > 0.00001) {
-            double ratio = qMin(1.0, maxDegreesPerFrame / distanceDegrees);
-            current.setX(current.x() + dx * ratio);
-            current.setY(current.y() + dy * ratio);
+        // 3. Budowa wektora kierunkowego (od current do target)
+        double dx = target.x() - current.x();
+        double dy = target.y() - current.y();
+        double distanceToTarget = qSqrt(dx*dx + dy*dy);
+
+        double moveX = 0;
+        double moveY = 0;
+
+        // SCENARIUSZ A: Jesteśmy w trasie, gonimy punkt docelowy z API
+        if (distanceToTarget > stepDegrees) {
+            moveX = (dx / distanceToTarget) * stepDegrees;
+            moveY = (dy / distanceToTarget) * stepDegrees;
         } 
-        // Scenariusz B: Tramwaj dojechał do celu, a API milczy -> Przewidywanie w przyszłość z hamowaniem
+        // SCENARIUSZ B: API opóźnia się. Jedziemy w ciemno wzdłuż ostatniego wektora (Extrapolation)
         else {
             if (previousPositions.contains(id)) {
-                // Skąd przyjechał ostatnio tramwaj (poprzedni pakiet)
                 QPointF prev = QPointF(previousPositions[id].lon, previousPositions[id].lat);
-                
-                // Jaki wektor kierunkowy ma zachować w przewidywaniu
                 double dirX = target.x() - prev.x();
                 double dirY = target.y() - prev.y();
                 double dirLen = qSqrt(dirX*dirX + dirY*dirY);
-                
+
                 if (dirLen > 0) {
-                    // Mnożymy ostatnią prędkość w buforze przez wartość mniejszą niż 1 (hamowanie)
-                    // Obniżamy ją w samej tablicy, żeby za chwilę wejść w warunek (speedKmh < 1.0)
+                    // Łagodnie redukujemy prędkość w buforze (hamowanie przed potencjalnym przystankiem)
                     for (int i=0; i<speedBuffers[id].size(); ++i) {
-                         speedBuffers[id][i] *= 0.95; // Wytraca 5% prędkości z każdą klatką
+                        speedBuffers[id][i] *= 0.98; 
                     }
-                    
-                    // Jeśli wciąż jedzie szybciej niż spacer, przesuwamy go (wirtualne hamowanie)
-                    if (speedKmh > 2.0) {
-                        double slowdownMaxDegrees = (speedKmh / 3.6 * dt) / 111320.0;
-                        current.setX(current.x() + (dirX / dirLen) * slowdownMaxDegrees);
-                        current.setY(current.y() + (dirY / dirLen) * slowdownMaxDegrees);
+                    if (speedKmh > 2.0) { // Przestajemy pchać, jeśli zwolnił do prędkości pieszego
+                        moveX = (dirX / dirLen) * stepDegrees;
+                        moveY = (dirY / dirLen) * stepDegrees;
                     }
                 }
             }
         }
 
-        // 4. Zapisujemy pozycję do kolejnej klatki
+        // 4. Przemieszczamy tramwaj sztucznie po wyliczonym wektorze
+        QPointF newPos(current.x() + moveX, current.y() + moveY);
+
+        // 5. MAGIA FIZYKI: Korygujemy kropkę, żeby nie spadła z zakrętu na torach!
+        current = snapToRoute(newPos.x(), newPos.y(), "16");
         currentAnimPositions[id] = current;
-        
-        // Przeliczamy kąt obrotu na podstawie faktycznego ruchu
-        heading = qRadiansToDegrees(qAtan2(target.y() - current.y(), target.x() - current.x())) * -1 + 90;
-        
-        // 5. Rysujemy w QML
+
+        // 6. Wyliczamy kąt obrotu tramwaju (Heading) na podstawie FAKTYCZNEGO przesunięcia po torze
+        double actualDx = current.x() - oldCurrent.x();
+        double actualDy = current.y() - oldCurrent.y();
+        double heading = qRadiansToDegrees(qAtan2(actualDy, actualDx)) * -1 + 90;
+
+        // 7. Renderujemy klatkę w QML
         m_tramModel->updateTram(id, "16", current.y(), current.x(), speedKmh, heading);
     }
 }
@@ -509,7 +490,7 @@ void MainWindow::onResult(QNetworkReply* reply) {
                 double currentLat = obj["x"].toDouble(); 
                 double currentLon = obj["y"].toDouble(); 
                 
-                QPointF snappedPos = snapToRoute(currentLon, currentLat);
+                QPointF snappedPos = snapToRoute(currentLon, currentLat, lineName);
                 targetAnimPositions[id] = snappedPos; 
                 if (!currentAnimPositions.contains(id)) currentAnimPositions[id] = snappedPos;
 

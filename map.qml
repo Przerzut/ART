@@ -49,14 +49,18 @@ Item {
             }
         }
 
-        MapPolyline {
-            line.width: 5
-            line.color: "#808080"
-            opacity: 0.7
+        // --- ZMIANA: Dynamiczny powielacz tras ---
+        MapItemView {
+            model: mainWindow.routePaths
             
-            // Zaciąga trasę prosto z MainWindow w C++
-            path: mainWindow.routePath
+            delegate: MapPolyline {
+                line.width: 4
+                line.color: "#808080" // Szary kolor dla torowiska
+                opacity: 0.6
+                path: modelData // Zaciąga pojedynczą trasę z listy
+            }
         }
+        // ------------------------------------------
 
         MapItemView {
             model: tramModel

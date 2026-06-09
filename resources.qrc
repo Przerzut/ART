@@ -1,7 +1,33 @@
 <!DOCTYPE RCC>
 <RCC version="1.0">
     <qresource prefix="/">
+        <file>map.qml</file>
         <file>app_pl.qm</file>
-        <file>map.qml</file> 
+
+        <file>trasa0.geojson</file>
+        <file>trasa1.geojson</file>
+        <file>trasa2.geojson</file>
+        <file>trasa3.geojson</file>
+        <file>trasa4.geojson</file>
+        <file>trasa5.geojson</file>
+        <file>trasa6.geojson</file>
+        <file>trasa7.geojson</file>
+        <file>trasa8.geojson</file>
+        <file>trasa9.geojson</file>
+        <file>trasa10.geojson</file>
+        <file>trasa11.geojson</file>
+        <file>trasa12.geojson</file>
+        <file>trasa13.geojson</file>
+        <file>trasa14.geojson</file>
+        <file>trasa15.geojson</file> 
+        <file>trasa16.geojson</file> 
+        <file>trasa17.geojson</file>
+        <file>trasa18.geojson</file>
+        <file>trasa19.geojson</file>
+        <file>trasa20.geojson</file>
+        <file>trasa21.geojson</file>
+        <file>trasa22.geojson</file>
+        <file>trasa23.geojson</file>
+        <file>trasa24.geojson</file>
     </qresource>
 </RCC>

@@ -50,7 +50,7 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
     Q_PROPERTY(int selectedTramId READ selectedTramId WRITE setSelectedTramId NOTIFY selectedTramIdChanged)
-    Q_PROPERTY(QVariantList routePath READ routePath CONSTANT)
+    Q_PROPERTY(QVariantList routePaths READ routePaths CONSTANT)
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
@@ -64,7 +64,7 @@ public:
         }
     }
 
-    QVariantList routePath() const;
+    QVariantList routePaths() const;
 
 signals:
     void selectedTramIdChanged(int id);
@@ -79,16 +79,17 @@ private slots:
     void toggleLanguage(); 
     void animateTrams();
     void onTrackedTramChanged(const QString &text); 
-    void loadRouteFromJson();
+    void loadRouteFromJson(const QString& lineName, const QString& filePath);                
+    
+    
 
 
 private:
     void setupUI();
     void setupCharts(); 
     void retranslateUi();
-    double calculateSpeed(double lon1, double lat1, double lon2, double lat2, qint64 timeDiffMs);
-    void initHardcodedRoute();                
-    QPointF snapToRoute(double lon, double lat); 
+    double calculateSpeed(double lon1, double lat1, double lon2, double lat2, qint64 timeDiffMs);               
+    QPointF snapToRoute(double lon, double lat, const QString& lineName);
     void cleanUpStaleTrams(qint64 currentTime);
 
     QTranslator appTranslator;
@@ -109,7 +110,7 @@ private:
     QTimer* animTimer; 
     QMap<int, QPointF> currentAnimPositions; 
     QMap<int, QPointF> targetAnimPositions;  
-    QVector<QPointF> routePoints; 
+    QMap<QString, QVector<QPointF>> routes; 
 
     QPushButton* btnToggle;
     QPushButton* btnLang;
