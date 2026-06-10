@@ -15,27 +15,15 @@
 #include <QtMath>
 #include <QSet>
 #include <limits>
-
-/**
- * @file mainwindow.cpp
- * @brief Implementacja logiki głównego okna aplikacji Analizator Tramwajowy (ART).
- */
-
-#include "mainwindow.h"
-#include <QHBoxLayout>
-#include <QVBoxLayout>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
-#include <QDateTime>
-#include <QNetworkRequest>
-#include <QApplication>
-#include <QtMath>
-#include <QSet>
-#include <limits>
 #include <QFile>
 #include <QDebug>
 
+/**
+ * @brief Konstruktor głównego okna aplikacji.
+ * @details Inicjalizuje interfejs użytkownika, ładuje domyślne trasy, podłącza silnik QML,
+ * konfiguruje timery do animacji i pobierania danych oraz ustawia połączenia sygnałów.
+ * @param parent Wskaźnik na widget nadrzędny (domyślnie nullptr).
+ */
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), isTracking(false), isPolish(false), startTime(0), currentTrackedId(-1) {
 
     loadRouteFromJson("1", ":/trasa1.geojson");
@@ -59,7 +47,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), isTracking(false)
 
     animTimer = new QTimer(this);
     connect(animTimer, &QTimer::timeout, this, &MainWindow::animateTrams);
-    animTimer->start(33); 
+    animTimer->start(33); // Ok. 30 klatek na sekundę (FPS)
 
     connect(btnToggle, &QPushButton::clicked, this, &MainWindow::toggleTracking);
     connect(btnLang, &QPushButton::clicked, this, &MainWindow::toggleLanguage);
@@ -70,6 +58,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), isTracking(false)
     updateVisibleRoutes();
 }
 
+/**
+ * @brief Ładuje i parsuje plik GeoJSON zawierający geometrię torowiska.
+ * @details Wyciąga koordynaty ze struktur LineString oraz MultiLineString i zapisuje
+ * je jako listę punktów dla danej linii, aby algorytm dociągania miał bazę odniesienia.
+ * @param lineName Nazwa/numer linii tramwajowej (np. "16").
+ * @param filePath Ścieżka do zasobu GeoJSON (np. ":/trasa16.geojson").
+ */
 void MainWindow::loadRouteFromJson(const QString& lineName, const QString& filePath) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -87,14 +82,12 @@ void MainWindow::loadRouteFromJson(const QString& lineName, const QString& fileP
         QString geomType = geometry["type"].toString();
         QJsonArray coords = geometry["coordinates"].toArray();
         
-        // Jeśli tor jest zapisanym prostym odcinkiem
         if (geomType == "LineString") {
             for (const QJsonValue &coord : coords) {
                 QJsonArray point = coord.toArray();
                 currentRoute.append(QPointF(point[0].toDouble(), point[1].toDouble()));
             }
         } 
-        // Jeśli tor jest pocięty na wiele połączonych kawałków (Standardowy eksport całej Linii)
         else if (geomType == "MultiLineString") {
             for (const QJsonValue &lineSegment : coords) {
                 QJsonArray segmentCoords = lineSegment.toArray();
@@ -110,6 +103,11 @@ void MainWindow::loadRouteFromJson(const QString& lineName, const QString& fileP
     qDebug() << "Załadowano punktów dla linii" << lineName << ":" << currentRoute.size();
 }
 
+/**
+ * @brief Tworzy układ interfejsu graficznego użytkownika.
+ * @details Konfiguruje panel boczny (przyciski, lista filtrowania) oraz główny panel
+ * z mapą QML i wykresami analitycznymi w zakładkach.
+ */
 void MainWindow::setupUI() {
     QWidget *centralWidget = new QWidget(this);
     QHBoxLayout *mainLayout = new QHBoxLayout(centralWidget);
@@ -189,19 +187,22 @@ void MainWindow::setupUI() {
     connect(lineFilterList, &QListWidget::itemChanged, this, &MainWindow::updateVisibleRoutes);
 }
 
+/**
+ * @brief Przekazuje listę ścieżek do narysowania w warstwie widoku QML.
+ * @details Zwraca listę tras (odcinków torowisk), ale tylko dla tych linii tramwajowych,
+ * które w danej chwili zaznaczone są ptaszkiem na liście filtrowania.
+ * @return QVariantList zawierający gotowe ścieżki QGeoCoordinate dla QML.
+ */
 QVariantList MainWindow::routePaths() const {
     QVariantList activePaths;
     
-    // Sprawdzamy wszystkie elementy na liście (odznaczane/zaznaczane ptaszkiem)
     if (lineFilterList) {
         for (int i = 0; i < lineFilterList->count(); ++i) {
             QListWidgetItem* item = lineFilterList->item(i);
             
-            // Jeśli element jest zaznaczony (✔)
             if (item->checkState() == Qt::Checked) {
                 QString lineName = item->text();
                 
-                // Wyciągamy jego trasę z naszej mapy, jeśli istnieje
                 if (routes.contains(lineName)) {
                     QVariantList singlePath;
                     for (const QPointF& p : routes[lineName]) {
@@ -212,10 +213,14 @@ QVariantList MainWindow::routePaths() const {
             }
         }
     }
-    return activePaths; // Zwracamy TYLKO aktywne trasy do QML
+    return activePaths; 
 }
 
-
+/**
+ * @brief Wywoływana po zmianie stanu listy filtrowania (kliknięcie ptaszka).
+ * @details Emituje powiadomienie do QML o konieczności przerysowania mapy torów oraz
+ * dogłębnie czyści z pamięci aplikacji wszystkie informacje o tramwajach z odznaczonej linii.
+ */
 void MainWindow::updateVisibleRoutes() {
     emit routePathsChanged(); 
 
@@ -230,20 +235,19 @@ void MainWindow::updateVisibleRoutes() {
 
     QList<int> idsToRemove;
     for (auto it = tramLines.constBegin(); it != tramLines.constEnd(); ++it) {
-        // Jeśli linia tego tramwaju nie znajduje się wśród aktywnych filtrów...
         if (!activeFilters.contains(it.value())) {
-            idsToRemove.append(it.key()); // ...zapisujemy ID do usunięcia
+            idsToRemove.append(it.key()); 
         }
     }
 
     for (int id : idsToRemove) {
-        m_tramModel->removeTram(id);       // Znika z mapy w QML
-        targetAnimPositions.remove(id);    // Przestaje być animowany (cel)
-        currentAnimPositions.remove(id);   // Przestaje być animowany (pozycja)
-        previousPositions.remove(id);      // Czyścimy historię pozycji GPS
-        speedBuffers.remove(id);           // Czyścimy bufor prędkości
-        speedHistories.remove(id);         // Czyścimy historię wykresu prędkości
-        tramLines.remove(id);              // Usuwamy z pamięci linii
+        m_tramModel->removeTram(id);       
+        targetAnimPositions.remove(id);    
+        currentAnimPositions.remove(id);   
+        previousPositions.remove(id);      
+        speedBuffers.remove(id);           
+        speedHistories.remove(id);         
+        tramLines.remove(id);              
 
         int idx = tramIdComboBox->findText(QString::number(id));
         if (idx != -1) tramIdComboBox->removeItem(idx);
@@ -254,6 +258,10 @@ void MainWindow::updateVisibleRoutes() {
     }
 }
 
+/**
+ * @brief Inicjalizuje moduł QtCharts odpowiedzialny za wykres prędkości na żywo.
+ * @details Ustawia osie X (czas) oraz Y (prędkość w km/h), konfiguruje wizualnie widok wykresu.
+ */
 void MainWindow::setupCharts() {
     speedSeries = new QLineSeries();
     QPen speedPen(Qt::blue); speedPen.setWidth(2); speedSeries->setPen(speedPen);
@@ -276,6 +284,11 @@ void MainWindow::setupCharts() {
     speedLayout->addWidget(speedView);
 }
 
+/**
+ * @brief Odświeża wszystkie łańcuchy tekstowe w aplikacji w oparciu o aktywny język.
+ * @details Przydatne w systemach wielojęzycznych (i18n), automatycznie wywoływane 
+ * po pomyślnym załadowaniu nowego pliku translacji `.qm`.
+ */
 void MainWindow::retranslateUi() {
     btnLang->setText(tr("Change Language (PL)"));
     btnToggle->setText(isTracking ? tr("STOP") : tr("START"));
@@ -288,11 +301,18 @@ void MainWindow::retranslateUi() {
     setWindowTitle(tr("ART - Tram Traffic Analyzer"));
 }
 
+/**
+ * @brief Przechwytuje zdarzenia zmiany języka wysyłane przez system bazowy Qt.
+ * @param event Wskaźnik na przechwycone zdarzenie.
+ */
 void MainWindow::changeEvent(QEvent *event) {
     if (event->type() == QEvent::LanguageChange) retranslateUi();
     QMainWindow::changeEvent(event);
 }
 
+/**
+ * @brief Slot przełączający język aplikacji (Polski / Angielski).
+ */
 void MainWindow::toggleLanguage() {
     isPolish = !isPolish; 
     if (isPolish) {
@@ -303,6 +323,10 @@ void MainWindow::toggleLanguage() {
     retranslateUi(); 
 }
 
+/**
+ * @brief Przełącza globalny stan śledzenia (Włącz/Wyłącz pobieranie danych).
+ * @details Resetuje timer, aktualizuje wygląd przycisku oraz loguje akcję w konsoli bocznej.
+ */
 void MainWindow::toggleTracking() {
     if(!isTracking) {
         startTime = QDateTime::currentMSecsSinceEpoch(); 
@@ -327,6 +351,11 @@ void MainWindow::toggleTracking() {
     }
 }
 
+/**
+ * @brief Inicjuje żądanie HTTP POST w celu pobrania lokalizacji tramwajów.
+ * @details Buduje dynamiczne zapytanie bazując na aktualnie zaznaczonych liniach 
+ * na liście po lewej stronie, minimalizując dzięki temu pobór niepotrzebnych danych z sieci.
+ */
 void MainWindow::fetchTramData() {
     QUrl url("https://mpk.wroc.pl/bus_position");
     QNetworkRequest request(url);
@@ -343,6 +372,15 @@ void MainWindow::fetchTramData() {
     networkManager->post(request, postString.toUtf8());
 }
 
+/**
+ * @brief Algorytm przyciągania niedokładnych kordynatów GPS do prawdziwego śladu torowiska.
+ * @details Rzutuje punkt z sensora prostopadle na odcinek wytyczony między dwoma najbliższymi
+ * węzłami torowiska pobranego z GeoJSON, aby usunąć szum (błędy GPS).
+ * @param lon Długość geograficzna pobrana z API.
+ * @param lat Szerokość geograficzna pobrana z API.
+ * @param lineName Nazwa linii (umożliwia dobór odpowiedniego szlaku z pamięci).
+ * @return QPointF Precyzyjnie dociągnięta i skorygowana pozycja (longitude, latitude).
+ */
 QPointF MainWindow::snapToRoute(double lon, double lat, const QString& lineName) {
     if (!routes.contains(lineName) || routes[lineName].isEmpty()) {
         return QPointF(lon, lat); // Brak trasy w bazie -> rysuj surowy GPS
@@ -375,6 +413,16 @@ QPointF MainWindow::snapToRoute(double lon, double lat, const QString& lineName)
     }
     return bestPoint;
 }
+
+/**
+ * @brief Wykorzystuje wzór Haversine'a do precyzyjnego oszacowania prędkości punktu na sferze (Ziemi).
+ * @param lon1 Długość geo. początkowa.
+ * @param lat1 Szerokość geo. początkowa.
+ * @param lon2 Długość geo. końcowa.
+ * @param lat2 Szerokość geo. końcowa.
+ * @param timeDiffMs Różnica czasu pomiędzy zebranymi próbkami (w milisekundach).
+ * @return Prędkość pojazdu w km/h.
+ */
 double MainWindow::calculateSpeed(double lon1, double lat1, double lon2, double lat2, qint64 timeDiffMs) {
     if (timeDiffMs <= 0) return 0.0;
     double R = 6371.0; 
@@ -385,14 +433,15 @@ double MainWindow::calculateSpeed(double lon1, double lat1, double lon2, double 
 }
 
 /**
- * @brief Realizuje płynną animację przemieszczania się tramwajów.
+ * @brief Realizuje płynną interpolację oraz animację przemieszczania się tramwajów.
  * @details Opiera się na kinematycznym wektorze prędkości. W każdej klatce (33ms) 
- * przesuwa tramwaj zgodnie z jego wektorem, a następnie koryguje pozycję do krzywizny torów.
+ * przesuwa tramwaj zgodnie z jego zwrotem w stronę najnowszego punktu pobranego z API.
+ * Następnie dla uzyskanej klatki ponawia dociąganie do krzywizny torów.
  */
 void MainWindow::animateTrams() {
     if (!isTracking || targetAnimPositions.isEmpty()) return;
 
-    double dt = 0.033; // Czas trwania jednej klatki (30 FPS)
+    double dt = 0.033;
 
     for (int id : targetAnimPositions.keys()) {
         QPointF target = targetAnimPositions[id];
@@ -400,25 +449,22 @@ void MainWindow::animateTrams() {
         QPointF oldCurrent = current; // Zapisujemy pozycję przed ruchem do obliczenia kąta!
 
         QString myLine = tramLines.value(id, "");
-        // 1. Obliczanie uśrednionej prędkości z bufora
+        
         double speedKmh = 0.0;
         if (speedBuffers.contains(id) && !speedBuffers[id].isEmpty()) {
             for (double s : speedBuffers[id]) speedKmh += s;
             speedKmh /= speedBuffers[id].size();
         }
 
-        // Jeśli tramwaj stoi w korku / na przystanku
         if (speedKmh < 1.0) {
             currentAnimPositions[id] = target;
             m_tramModel->updateTram(id, myLine, current.y(), current.x(), speedKmh, 0); 
             continue; 
         }
 
-        // 2. Wyliczanie maksymalnego dystansu dla tej klatki animacji
         double speedMs = speedKmh / 3.6;
         double stepDegrees = (speedMs * dt) / 111320.0; 
 
-        // 3. Budowa wektora kierunkowego (od current do target)
         double dx = target.x() - current.x();
         double dy = target.y() - current.y();
         double distanceToTarget = qSqrt(dx*dx + dy*dy);
@@ -426,12 +472,10 @@ void MainWindow::animateTrams() {
         double moveX = 0;
         double moveY = 0;
 
-        // SCENARIUSZ A: Jesteśmy w trasie, gonimy punkt docelowy z API
         if (distanceToTarget > stepDegrees) {
             moveX = (dx / distanceToTarget) * stepDegrees;
             moveY = (dy / distanceToTarget) * stepDegrees;
         } 
-        // SCENARIUSZ B: API opóźnia się. Jedziemy w ciemno wzdłuż ostatniego wektora (Extrapolation)
         else {
             if (previousPositions.contains(id)) {
                 QPointF prev = QPointF(previousPositions[id].lon, previousPositions[id].lat);
@@ -440,11 +484,10 @@ void MainWindow::animateTrams() {
                 double dirLen = qSqrt(dirX*dirX + dirY*dirY);
 
                 if (dirLen > 0) {
-                    // Łagodnie redukujemy prędkość w buforze (hamowanie przed potencjalnym przystankiem)
                     for (int i=0; i<speedBuffers[id].size(); ++i) {
                         speedBuffers[id][i] *= 0.98; 
                     }
-                    if (speedKmh > 2.0) { // Przestajemy pchać, jeśli zwolnił do prędkości pieszego
+                    if (speedKmh > 2.0) {
                         moveX = (dirX / dirLen) * stepDegrees;
                         moveY = (dirY / dirLen) * stepDegrees;
                     }
@@ -465,6 +508,11 @@ void MainWindow::animateTrams() {
     }
 }
 
+/**
+ * @brief Obsługuje zmianę wartości w menu wyboru śledzonego tramwaju (ComboBox).
+ * @details Zmienia podświetlenie na mapie QML oraz podmienia dane prędkości renderowane na wykresie.
+ * @param text Nowo wybrana opcja ("AUTO" lub ID konkretnego tramwaju).
+ */
 void MainWindow::onTrackedTramChanged(const QString &text) {
     if (text == "AUTO") {
         setSelectedTramId(-1); 
@@ -485,6 +533,12 @@ void MainWindow::onTrackedTramChanged(const QString &text) {
     logConsole->append(tr("<i>[SYSTEM] Switched view to vehicle ID: %1</i>").arg(text));
 }
 
+/**
+ * @brief Proces "odśmiecający" (Garbage Collector) - zwalnia z pamięci pojazdy niekatywne.
+ * @details Jeśli API MPK przestało nadawać sygnał dla jakiegoś ID (np. tramwaj zjechał do zajezdni
+ * i wyłączył nadajnik GPS) przez ponad 60 sekund, aplikacja bezpiecznie usuwa go z mapy oraz pamięci.
+ * @param currentTime Obecny znacznik czasu (Unix Epoch ms).
+ */
 void MainWindow::cleanUpStaleTrams(qint64 currentTime) {
     QList<int> toRemove;
     for (auto it = previousPositions.constBegin(); it != previousPositions.constEnd(); ++it) {
@@ -511,6 +565,13 @@ void MainWindow::cleanUpStaleTrams(qint64 currentTime) {
     }
 }
 
+/**
+ * @brief Przetwarza odpowiedź zwrotną od serwera MPK.
+ * @details Parauje otrzymane od API paczki danych JSON. Odnajduje współrzędne tramwajów,
+ * wylicza ich prędkość na podstawie odległości miedzy pakietami i zarządza archiwum pozycji.
+ * Aktualizuje stan wizualny mapy (punkty docelowe) dla silnika rysowania QML.
+ * @param reply Obiekt QNetworkReply zawierający odpowiedź z serwera.
+ */
 void MainWindow::onResult(QNetworkReply* reply) {
     if (reply->error() != QNetworkReply::NoError) {
         logConsole->append(tr("<i>[ERROR] API Failure: %1</i>").arg(reply->errorString()));
@@ -593,4 +654,7 @@ void MainWindow::onResult(QNetworkReply* reply) {
     reply->deleteLater();
 }
 
+/**
+ * @brief Destruktor domyślny głównego okna aplikacji.
+ */
 MainWindow::~MainWindow() {}
