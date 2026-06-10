@@ -50,7 +50,7 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
     Q_PROPERTY(int selectedTramId READ selectedTramId WRITE setSelectedTramId NOTIFY selectedTramIdChanged)
-    Q_PROPERTY(QVariantList routePaths READ routePaths CONSTANT)
+    Q_PROPERTY(QVariantList routePaths READ routePaths NOTIFY routePathsChanged)
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
@@ -68,6 +68,7 @@ public:
 
 signals:
     void selectedTramIdChanged(int id);
+    void routePathsChanged();
 
 protected:
     void changeEvent(QEvent *event) override;
@@ -79,7 +80,9 @@ private slots:
     void toggleLanguage(); 
     void animateTrams();
     void onTrackedTramChanged(const QString &text); 
-    void loadRouteFromJson(const QString& lineName, const QString& filePath);                
+    void loadRouteFromJson(const QString& lineName, const QString& filePath);      
+    
+    void updateVisibleRoutes();
     
     
 
@@ -98,7 +101,8 @@ private:
     bool isTracking;
     bool isPolish;
     qint64 startTime;
-    int currentTrackedId; 
+    int currentTrackedId;
+    QMap<int, QString> tramLines;
 
     TramModel* m_tramModel;
     QQuickWidget* m_quickWidget;

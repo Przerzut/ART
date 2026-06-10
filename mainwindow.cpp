@@ -38,8 +38,8 @@
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), isTracking(false), isPolish(false), startTime(0), currentTrackedId(-1) {
 
-    loadRouteFromJson("16", ":/trasa16.geojson");
-
+    loadRouteFromJson("1", ":/trasa1.geojson");
+    lineFilterList = nullptr;
 
     m_tramModel = new TramModel(this);
     m_quickWidget = new QQuickWidget(this);
@@ -66,6 +66,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), isTracking(false)
     connect(dataTimer, &QTimer::timeout, this, &MainWindow::fetchTramData);
     connect(networkManager, &QNetworkAccessManager::finished, this, &MainWindow::onResult);
     connect(tramIdComboBox, &QComboBox::currentTextChanged, this, &MainWindow::onTrackedTramChanged);
+
+    updateVisibleRoutes();
 }
 
 void MainWindow::loadRouteFromJson(const QString& lineName, const QString& filePath) {
@@ -127,7 +129,7 @@ void MainWindow::setupUI() {
     "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", 
     "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", 
     "21", "22", "23", "24"
-};
+    };
     for (const QString& linia : linie) {
         QString filePath = QString(":/trasa%1.geojson").arg(linia);
         
@@ -183,22 +185,73 @@ void MainWindow::setupUI() {
     QVBoxLayout *mapLayout = new QVBoxLayout(mapChartTab);
     mapLayout->setContentsMargins(0, 0, 0, 0); 
     mapLayout->addWidget(m_quickWidget);
+
+    connect(lineFilterList, &QListWidget::itemChanged, this, &MainWindow::updateVisibleRoutes);
 }
 
 QVariantList MainWindow::routePaths() const {
-    QVariantList allPaths; // Główna lista przechowująca wszystkie trasy
+    QVariantList activePaths;
     
-    // Przechodzimy przez wszystkie załadowane trasy w naszym słowniku (routes)
-    for (auto it = routes.begin(); it != routes.end(); ++it) {
-        QVariantList singlePath; // Lista punktów dla jednej konkretnej trasy
-        for (const QPointF& p : it.value()) {
-            singlePath.append(QVariant::fromValue(QGeoCoordinate(p.y(), p.x())));
+    // Sprawdzamy wszystkie elementy na liście (odznaczane/zaznaczane ptaszkiem)
+    if (lineFilterList) {
+        for (int i = 0; i < lineFilterList->count(); ++i) {
+            QListWidgetItem* item = lineFilterList->item(i);
+            
+            // Jeśli element jest zaznaczony (✔)
+            if (item->checkState() == Qt::Checked) {
+                QString lineName = item->text();
+                
+                // Wyciągamy jego trasę z naszej mapy, jeśli istnieje
+                if (routes.contains(lineName)) {
+                    QVariantList singlePath;
+                    for (const QPointF& p : routes[lineName]) {
+                        singlePath.append(QVariant::fromValue(QGeoCoordinate(p.y(), p.x())));
+                    }
+                    activePaths.append(QVariant::fromValue(singlePath));
+                }
+            }
         }
-        // Dodajemy gotową trasę do głównej listy
-        allPaths.append(QVariant::fromValue(singlePath)); 
     }
-    
-    return allPaths; // Zwracamy listę list (Matrix) do QML
+    return activePaths; // Zwracamy TYLKO aktywne trasy do QML
+}
+
+
+void MainWindow::updateVisibleRoutes() {
+    emit routePathsChanged(); 
+
+    if (!lineFilterList || !m_tramModel) return;
+
+    QStringList activeFilters;
+    for (int i = 0; i < lineFilterList->count(); ++i) {
+        if (lineFilterList->item(i)->checkState() == Qt::Checked) {
+            activeFilters.append(lineFilterList->item(i)->text());
+        }
+    }
+
+    QList<int> idsToRemove;
+    for (auto it = tramLines.constBegin(); it != tramLines.constEnd(); ++it) {
+        // Jeśli linia tego tramwaju nie znajduje się wśród aktywnych filtrów...
+        if (!activeFilters.contains(it.value())) {
+            idsToRemove.append(it.key()); // ...zapisujemy ID do usunięcia
+        }
+    }
+
+    for (int id : idsToRemove) {
+        m_tramModel->removeTram(id);       // Znika z mapy w QML
+        targetAnimPositions.remove(id);    // Przestaje być animowany (cel)
+        currentAnimPositions.remove(id);   // Przestaje być animowany (pozycja)
+        previousPositions.remove(id);      // Czyścimy historię pozycji GPS
+        speedBuffers.remove(id);           // Czyścimy bufor prędkości
+        speedHistories.remove(id);         // Czyścimy historię wykresu prędkości
+        tramLines.remove(id);              // Usuwamy z pamięci linii
+
+        int idx = tramIdComboBox->findText(QString::number(id));
+        if (idx != -1) tramIdComboBox->removeItem(idx);
+        
+        if (currentTrackedId == id) {
+            tramIdComboBox->setCurrentIndex(0);
+        }
+    }
 }
 
 void MainWindow::setupCharts() {
@@ -346,6 +399,7 @@ void MainWindow::animateTrams() {
         QPointF current = currentAnimPositions.value(id, target); 
         QPointF oldCurrent = current; // Zapisujemy pozycję przed ruchem do obliczenia kąta!
 
+        QString myLine = tramLines.value(id, "");
         // 1. Obliczanie uśrednionej prędkości z bufora
         double speedKmh = 0.0;
         if (speedBuffers.contains(id) && !speedBuffers[id].isEmpty()) {
@@ -356,7 +410,7 @@ void MainWindow::animateTrams() {
         // Jeśli tramwaj stoi w korku / na przystanku
         if (speedKmh < 1.0) {
             currentAnimPositions[id] = target;
-            m_tramModel->updateTram(id, "16", current.y(), current.x(), speedKmh, 0); 
+            m_tramModel->updateTram(id, myLine, current.y(), current.x(), speedKmh, 0); 
             continue; 
         }
 
@@ -398,20 +452,16 @@ void MainWindow::animateTrams() {
             }
         }
 
-        // 4. Przemieszczamy tramwaj sztucznie po wyliczonym wektorze
         QPointF newPos(current.x() + moveX, current.y() + moveY);
 
-        // 5. MAGIA FIZYKI: Korygujemy kropkę, żeby nie spadła z zakrętu na torach!
-        current = snapToRoute(newPos.x(), newPos.y(), "16");
+        current = snapToRoute(newPos.x(), newPos.y(), myLine);
         currentAnimPositions[id] = current;
 
-        // 6. Wyliczamy kąt obrotu tramwaju (Heading) na podstawie FAKTYCZNEGO przesunięcia po torze
         double actualDx = current.x() - oldCurrent.x();
         double actualDy = current.y() - oldCurrent.y();
         double heading = qRadiansToDegrees(qAtan2(actualDy, actualDx)) * -1 + 90;
 
-        // 7. Renderujemy klatkę w QML
-        m_tramModel->updateTram(id, "16", current.y(), current.x(), speedKmh, heading);
+        m_tramModel->updateTram(id, myLine, current.y(), current.x(), speedKmh, heading);
     }
 }
 
@@ -487,6 +537,9 @@ void MainWindow::onResult(QNetworkReply* reply) {
             
             if(activeFilters.contains(lineName)) {
                 int id = obj["k"].toInt();
+
+                tramLines[id] = lineName;
+
                 double currentLat = obj["x"].toDouble(); 
                 double currentLon = obj["y"].toDouble(); 
                 
