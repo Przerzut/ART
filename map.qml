@@ -24,7 +24,8 @@ Item {
         plugin: osmPlugin
         
         center: QtPositioning.coordinate(51.1079, 17.0385)
-        zoomLevel: 14.5
+        zoomLevel: mainWindow.isLaptopMode ? 12.0 : 14.5
+        gesture.enabled: !mainWindow.isLaptopMode
 
         Component.onCompleted: {
             if (supportedMapTypes.length > 0) {
@@ -44,6 +45,7 @@ Item {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             
             onWheel: wheel => {
+                if (mainWindow.isLaptopMode) return;
                 if (wheel.angleDelta.y > 0) map.zoomLevel += 0.5
                 else map.zoomLevel -= 0.5
             }
@@ -126,6 +128,7 @@ Item {
         anchors.right: parent.right; anchors.rightMargin: 15
         anchors.top: parent.top; anchors.topMargin: 15
         spacing: 10
+        visible: !mainWindow.isLaptopMode
         Button { text: "+"; font.pixelSize: 25; width: 40; height: 40; onClicked: map.zoomLevel += 0.5 }
         Button { text: "-"; font.pixelSize: 25; width: 40; height: 40; onClicked: map.zoomLevel -= 0.5 }
     }

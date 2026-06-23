@@ -72,6 +72,11 @@ class MainWindow : public QMainWindow {
      */
     Q_PROPERTY(QVariantList routePaths READ routePaths NOTIFY routePathsChanged)
 
+    /** * @property isLaptopMode
+     * @brief Flaga informująca, czy aplikacja została uruchomiona z parametrem "laptop".
+     */
+    Q_PROPERTY(bool isLaptopMode READ isLaptopMode CONSTANT)
+
 public:
     /**
      * @brief Konstruktor klasy MainWindow.
@@ -99,6 +104,9 @@ public:
 
     /** @brief Zwraca listę tras w formacie zrozumiałym dla silnika QML. */
     QVariantList routePaths() const;
+
+    /** @brief Sprawdza, czy w argumentach startowych przekazano "laptop". */
+    bool isLaptopMode() const;
 
 signals:
     /** @brief Sygnał emitowany po zmianie śledzonego ID pojazdu. */

@@ -4,6 +4,7 @@
  */
 
 #include "mainwindow.h"
+#include <QCoreApplication>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QJsonDocument>
@@ -185,6 +186,14 @@ void MainWindow::setupUI() {
     mapLayout->addWidget(m_quickWidget);
 
     connect(lineFilterList, &QListWidget::itemChanged, this, &MainWindow::updateVisibleRoutes);
+}
+
+/**
+ * @brief Sprawdza, czy w argumentach startowych przekazano "laptop".
+ */
+bool MainWindow::isLaptopMode() const {
+    //qDebug() << "Tryb laptopa";
+    return QCoreApplication::arguments().contains("laptop");
 }
 
 /**
