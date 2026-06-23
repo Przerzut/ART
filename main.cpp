@@ -6,6 +6,7 @@
 
 #include "mainwindow.h"
 #include <QApplication>
+#include <QQuickWindow>
 
 /**
  * @brief Główna funkcja programu.
@@ -14,6 +15,7 @@
  * @return Kod wyjściowy aplikacji.
  */
 int main(int argc, char *argv[]) {
+    QCoreApplication::setAttribute(Qt::AA_UseSoftwareOpenGL);
     QApplication a(argc, argv);
     MainWindow w;
     w.show();

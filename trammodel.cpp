@@ -88,7 +88,6 @@ void TramModel::updateTram(int id, const QString& line, double lat, double lon, 
         m_trams[idx].heading = heading;
         
         QModelIndex modelIndex = createIndex(idx, 0);
-        // Informujemy QML tylko o tych polach, które faktycznie ulegają zmianie w animacji
         emit dataChanged(modelIndex, modelIndex, {CoordinateRole, SpeedRole, HeadingRole});
     } else {
         beginInsertRows(QModelIndex(), m_trams.count(), m_trams.count());
